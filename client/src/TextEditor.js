@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
 import { io } from "socket.io-client";
 import { useParams } from "react-router-dom";
 
+const SAVE_INTERVAL_MS = 2000;
 const TOOLBAR_OPTIONS = [
   [{ header: [1, 2, 3, 4, 5, 6, false] }],
   [{ font: [] }],
@@ -16,7 +17,7 @@ const TOOLBAR_OPTIONS = [
   ["clean"]
 ];
 
-const TextEditor = () => {
+export default function TextEditor() {
   const { id: documentId } = useParams();
   const [socket, setSocket] = useState();
   const [quill, setQuill] = useState();
@@ -44,18 +45,28 @@ const TextEditor = () => {
   useEffect(() => {
     if (socket == null || quill == null) return;
 
-    const handler = (delta) => {
-      quill.updateContents(delta);
-    };
-    socket.on("recieve-changes", handler);
+    const interval = setInterval(() => {
+      socket.emit("save-document", quill.getContents());
+    }, SAVE_INTERVAL_MS);
 
     return () => {
-      socket.off("recieve-changes", handler);
+      clearInterval(interval);
     };
   }, [socket, quill]);
 
-  // track changes users make
-  // delta is the change
+  useEffect(() => {
+    if (socket == null || quill == null) return;
+
+    const handler = (delta) => {
+      quill.updateContents(delta);
+    };
+    socket.on("receive-changes", handler);
+
+    return () => {
+      socket.off("receive-changes", handler);
+    };
+  }, [socket, quill]);
+
   useEffect(() => {
     if (socket == null || quill == null) return;
 
@@ -81,11 +92,8 @@ const TextEditor = () => {
       modules: { toolbar: TOOLBAR_OPTIONS }
     });
     q.disable();
-    q.setText("Loading...");
+    q.setText("Waiting for server...");
     setQuill(q);
   }, []);
-
   return <div className="container" ref={wrapperRef}></div>;
-};
-
-export default TextEditor;
+}
